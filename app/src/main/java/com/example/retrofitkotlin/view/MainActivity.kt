@@ -14,6 +14,7 @@ import hu.akarnokd.rxjava3.retrofit.RxJava3CallAdapterFactory
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
+import kotlinx.coroutines.*
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -30,6 +31,11 @@ class MainActivity : AppCompatActivity(), RecyclerAdapter.Listener {
     private var recyclerAdapter : RecyclerAdapter? = null
 
     private var compositeDisposable: CompositeDisposable? = null
+    private var job : Job? = null
+
+    val exceptionHandler = CoroutineExceptionHandler { coroutineContext, throwable ->
+        println("Error : ${throwable.localizedMessage}")
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,14 +59,32 @@ class MainActivity : AppCompatActivity(), RecyclerAdapter.Listener {
             .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
             .build().create(CryptoAPI::class.java)
 
+        job = CoroutineScope(Dispatchers.IO).launch {
+            val response = retrofit.getData()
+
+            withContext(Dispatchers.Main+exceptionHandler){
+                if(response.isSuccessful){
+                    response.body()?.let {
+                        crytoList = ArrayList(it)
+                        crytoList?.let {
+                            recyclerAdapter = RecyclerAdapter(it,this@MainActivity)
+                            binding.recyclerView.adapter = recyclerAdapter
+                        }
+                    }
+                }
+            }
+        }
+
+
         //RxJava
+        /*
         compositeDisposable?.add(
             retrofit.getData()
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(this::handleResponse)
         )
-
+        */
 
         /*
         RETROFIT CALL
@@ -92,6 +116,8 @@ class MainActivity : AppCompatActivity(), RecyclerAdapter.Listener {
         }) */
     }
 
+    /*
+    //RxJava handler function
     private fun handleResponse(resCryptoList: List<CryptoModel>){
         crytoList = ArrayList(resCryptoList)
 
@@ -101,6 +127,7 @@ class MainActivity : AppCompatActivity(), RecyclerAdapter.Listener {
         }
 
     }
+     */
 
 
     override fun onItemClick(cryptoModel: CryptoModel) {
@@ -109,7 +136,8 @@ class MainActivity : AppCompatActivity(), RecyclerAdapter.Listener {
 
     override fun onDestroy() {
         super.onDestroy()
-        compositeDisposable?.clear()
+        job?.cancel()
+        //compositeDisposable?.clear()
     }
 
 
